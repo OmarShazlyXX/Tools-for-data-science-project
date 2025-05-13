@@ -31,29 +31,30 @@ steps:
         cat > /workspace/event.json << EOF
         {
           "repository": {
-            "name": "$REPO_NAME",
-            "full_name": "$PROJECT_ID/$REPO_NAME"
+            "name": "$$REPO_NAME",
+            "full_name": "$$PROJECT_ID/$$REPO_NAME"
           },
-          "ref": "refs/heads/$BRANCH_NAME",
+          "ref": "refs/heads/$$BRANCH_NAME",
           "pusher": {
-            "name": "$AUTHOR_NAME",
-            "email": "$AUTHOR_EMAIL"
+            "name": "$$AUTHOR_NAME",
+            "email": "$$AUTHOR_EMAIL"
           },
           "commits": [
             {
-              "id": "$COMMIT_SHA",
-              "message": "$COMMIT_MSG",
+              "id": "$$COMMIT_SHA",
+              "message": "$$COMMIT_MSG",
               "author": {
-                "name": "$AUTHOR_NAME",
-                "email": "$AUTHOR_EMAIL"
+                "name": "$$AUTHOR_NAME",
+                "email": "$$AUTHOR_EMAIL"
               },
-              "added": $ADDED_FILES,
-              "modified": $MODIFIED_FILES,
-              "removed": $REMOVED_FILES
+              "added": $$ADDED_FILES,
+              "modified": $$MODIFIED_FILES,
+              "removed": $$REMOVED_FILES
             }
           ]
         }
         EOF
+
         
         # Print the event data for debugging
         cat /workspace/event.json
