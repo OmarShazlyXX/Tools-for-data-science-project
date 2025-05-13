@@ -1,60 +1,67 @@
 steps:
-  # Extract repository and commit information
-  - name: 'gcr.io/cloud-builders/git'
-    id: 'extract-info'
+  # Single step to extract info and publish to Pub/Sub
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'process-github-event'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Get repository information
-        REPO_NAME=$REPO_NAME
-        BRANCH_NAME=$BRANCH_NAME
-        COMMIT_SHA=$COMMIT_SHA
-        PROJECT_ID=$PROJECT_ID
+        # Install jq if not available
+        apt-get update && apt-get install -y jq
         
-        # Get commit details using git commands
-        COMMIT_MSG=$(git log -1 --pretty=format:"%s")
-        AUTHOR_NAME=$(git log -1 --pretty=format:"%an")
-        AUTHOR_EMAIL=$(git log -1 --pretty=format:"%ae")
-        
-        # Get modified files
-        ADDED_FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA --diff-filter=A | jq -R -s -c 'split("\n")[:-1]' || echo "[]")
-        MODIFIED_FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA --diff-filter=M | jq -R -s -c 'split("\n")[:-1]' || echo "[]")
-        REMOVED_FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA --diff-filter=D | jq -R -s -c 'split("\n")[:-1]' || echo "[]")
-        
-        echo "Repository: $REPO_NAME"
+        # Get basic info from built-in variables
+        echo "Repository: $_REPO_NAME"
         echo "Branch: $BRANCH_NAME"
-        echo "Commit: $COMMIT_SHA"
-        echo "Author: $AUTHOR_NAME"
+        echo "Commit SHA: $COMMIT_SHA"
+        echo "Project ID: $PROJECT_ID"
         
-        # Create JSON payload
-        cat > /workspace/event.json << EOF
-        {
-          "repository": {
-            "name": "$$REPO_NAME",
-            "full_name": "$$PROJECT_ID/$$REPO_NAME"
-          },
-          "ref": "refs/heads/$$BRANCH_NAME",
-          "pusher": {
-            "name": "$$AUTHOR_NAME",
-            "email": "$$AUTHOR_EMAIL"
-          },
-          "commits": [
-            {
-              "id": "$$COMMIT_SHA",
-              "message": "$$COMMIT_MSG",
+        # Create a simplified JSON payload without variables
+        # that would be interpreted as substitutions
+        REPO_NAME="$_REPO_NAME"
+        BRANCH="${BRANCH_NAME#refs/heads/}"
+        
+        # Get commit details
+        COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+        AUTHOR_NAME=$(git log -1 --pretty=format:'%an')
+        AUTHOR_EMAIL=$(git log -1 --pretty=format:'%ae')
+        
+        echo "Author: $AUTHOR_NAME"
+        echo "Message: $COMMIT_MSG"
+        
+        # Create a simple JSON payload
+        jq -n \
+          --arg repo "$REPO_NAME" \
+          --arg fullrepo "$PROJECT_ID/$REPO_NAME" \
+          --arg branch "$BRANCH" \
+          --arg sha "$COMMIT_SHA" \
+          --arg msg "$COMMIT_MSG" \
+          --arg author_name "$AUTHOR_NAME" \
+          --arg author_email "$AUTHOR_EMAIL" \
+          '{
+            "repository": {
+              "name": $repo,
+              "full_name": $fullrepo
+            },
+            "ref": "refs/heads/" + $branch,
+            "pusher": {
+              "name": $author_name,
+              "email": $author_email
+            },
+            "commits": [{
+              "id": $sha,
+              "message": $msg,
               "author": {
-                "name": "$$AUTHOR_NAME",
-                "email": "$$AUTHOR_EMAIL"
-              },
-              "added": $$ADDED_FILES,
-              "modified": $$MODIFIED_FILES,
-              "removed": $$REMOVED_FILES
-            }
-          ]
-        }
-        EOF
-
+                "name": $author_name,
+                "email": $author_email
+              }
+            }]
+          }' > /workspace/event.json
+        
+        cat /workspace/event.json
+        
+        # Publish to Pub/Sub
+        gcloud pubsub topics publish github-events --message-file=/workspace/event.json
+        echo "Published event to github-events topic"
         
         # Print the event data for debugging
         cat /workspace/event.json
@@ -76,3 +83,4 @@ options:
 
 # Timeout for the entire build
 timeout: '600s'
+
