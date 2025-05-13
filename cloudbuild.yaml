@@ -1,66 +1,38 @@
 steps:
-  # Single step to extract info and publish to Pub/Sub
+  # Simple step to publish a static message to Pub/Sub
   - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'process-github-event'
+    id: 'publish-to-pubsub'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Install jq if not available
-        apt-get update && apt-get install -y jq
+        # Create a simple static JSON payload
+        echo '{
+          "repository": {
+            "name": "github-pubsub",
+            "full_name": "github-pubsub"
+          },
+          "ref": "refs/heads/main",
+          "pusher": {
+            "name": "Cloud Build",
+            "email": "cloud-build@example.com"
+          },
+          "commits": [{
+            "id": "123456",
+            "message": "Triggered by Cloud Build",
+            "author": {
+              "name": "Cloud Build",
+              "email": "cloud-build@example.com"
+            }
+          }]
+        }' > /workspace/event.json
         
-        # Get basic info from built-in variables
-        echo "Repository: $_REPO_NAME"
-        echo "Branch: $BRANCH_NAME"
-        echo "Commit SHA: $COMMIT_SHA"
-        echo "Project ID: $PROJECT_ID"
-        
-        # Create a simplified JSON payload without variables
-        # that would be interpreted as substitutions
-        REPO_NAME="$_REPO_NAME"
-        BRANCH="${BRANCH_NAME#refs/heads/}"
-        
-        # Get commit details
-        COMMIT_MSG=$(git log -1 --pretty=format:'%s')
-        AUTHOR_NAME=$(git log -1 --pretty=format:'%an')
-        AUTHOR_EMAIL=$(git log -1 --pretty=format:'%ae')
-        
-        echo "Author: $AUTHOR_NAME"
-        echo "Message: $COMMIT_MSG"
-        
-        # Create a simple JSON payload
-        jq -n \
-          --arg repo "$REPO_NAME" \
-          --arg fullrepo "$PROJECT_ID/$REPO_NAME" \
-          --arg branch "$BRANCH" \
-          --arg sha "$COMMIT_SHA" \
-          --arg msg "$COMMIT_MSG" \
-          --arg author_name "$AUTHOR_NAME" \
-          --arg author_email "$AUTHOR_EMAIL" \
-          '{
-            "repository": {
-              "name": $repo,
-              "full_name": $fullrepo
-            },
-            "ref": "refs/heads/" + $branch,
-            "pusher": {
-              "name": $author_name,
-              "email": $author_email
-            },
-            "commits": [{
-              "id": $sha,
-              "message": $msg,
-              "author": {
-                "name": $author_name,
-                "email": $author_email
-              }
-            }]
-          }' > /workspace/event.json
-        
+        # Print the event data for debugging
         cat /workspace/event.json
         
         # Publish to Pub/Sub
         gcloud pubsub topics publish github-events --message-file=/workspace/event.json
+        
         echo "Published event to github-events topic"
         
         # Print the event data for debugging
@@ -83,4 +55,3 @@ options:
 
 # Timeout for the entire build
 timeout: '600s'
-
