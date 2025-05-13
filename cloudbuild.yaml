@@ -1,0 +1,67 @@
+steps:
+  # Extract repository and commit information
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'extract-info'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Get repository information
+        REPO_NAME=$REPO_NAME
+        BRANCH_NAME=$BRANCH_NAME
+        COMMIT_SHA=$COMMIT_SHA
+        
+        # Get commit details
+        COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+        COMMIT_AUTHOR=$(git log -1 --pretty=format:"%an")
+        COMMIT_EMAIL=$(git log -1 --pretty=format:"%ae")
+        
+        # Get modified files
+        ADDED_FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA --diff-filter=A | jq -R -s -c 'split("\n")[:-1]')
+        MODIFIED_FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA --diff-filter=M | jq -R -s -c 'split("\n")[:-1]')
+        REMOVED_FILES=$(git diff-tree --no-commit-id --name-only -r $COMMIT_SHA --diff-filter=D | jq -R -s -c 'split("\n")[:-1]')
+        
+        # Create JSON payload
+        cat > /workspace/event.json << EOF
+        {
+          "repository": {
+            "name": "$REPO_NAME",
+            "full_name": "$PROJECT_ID/$REPO_NAME"
+          },
+          "ref": "refs/heads/$BRANCH_NAME",
+          "pusher": {
+            "name": "$COMMIT_AUTHOR",
+            "email": "$COMMIT_EMAIL"
+          },
+          "commits": [
+            {
+              "id": "$COMMIT_SHA",
+              "message": "$COMMIT_MSG",
+              "author": {
+                "name": "$COMMIT_AUTHOR",
+                "email": "$COMMIT_EMAIL"
+              },
+              "added": $ADDED_FILES,
+              "modified": $MODIFIED_FILES,
+              "removed": $REMOVED_FILES
+            }
+          ]
+        }
+        EOF
+        
+        # Print the event data for debugging
+        cat /workspace/event.json
+
+  # Publish event to Pub/Sub
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'publish-event'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Publish the event to Pub/Sub
+        gcloud pubsub topics publish github-events --message-body="$(cat /workspace/event.json)"
+        echo "Published event to github-events topic"
+
+# Timeout for the entire build
+timeout: '600s'
