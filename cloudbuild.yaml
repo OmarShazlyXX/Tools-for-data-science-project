@@ -63,5 +63,9 @@ steps:
         gcloud pubsub topics publish github-events --message-body="$(cat /workspace/event.json)"
         echo "Published event to github-events topic"
 
+# Build options
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 # Timeout for the entire build
 timeout: '600s'
