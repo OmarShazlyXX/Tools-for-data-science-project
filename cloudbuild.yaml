@@ -48,10 +48,8 @@ steps:
         # Create a simple event JSON
         echo "Creating simple event JSON..."
         
-        # Get basic git info
-        COMMIT_MESSAGE=$(git log -1 --pretty=%B || echo "Cloud Build Trigger")
-        AUTHOR_NAME=$(git log -1 --pretty=%an || echo "Cloud Build")
-        AUTHOR_EMAIL=$(git log -1 --pretty=%ae || echo "cloud-build@example.com")
+        # Create a simple JSON payload using only Cloud Build built-in substitutions
+        # Valid substitutions: $PROJECT_ID, $BUILD_ID, $COMMIT_SHA, $BRANCH_NAME, $TAG_NAME, $REVISION_ID, $REPO_NAME, $SHORT_SHA
         
         # Create a simple JSON payload
         echo "{
@@ -61,15 +59,15 @@ steps:
           },
           \"ref\": \"refs/heads/$BRANCH_NAME\",
           \"pusher\": {
-            \"name\": \"$AUTHOR_NAME\",
-            \"email\": \"$AUTHOR_EMAIL\"
+            \"name\": \"Cloud Build\",
+            \"email\": \"cloud-build@example.com\"
           },
           \"commits\": [{
             \"id\": \"$COMMIT_SHA\",
-            \"message\": \"$COMMIT_MESSAGE\",
+            \"message\": \"Triggered by Cloud Build - $BUILD_ID\",
             \"author\": {
-              \"name\": \"$AUTHOR_NAME\",
-              \"email\": \"$AUTHOR_EMAIL\"
+              \"name\": \"Cloud Build\",
+              \"email\": \"cloud-build@example.com\"
             },
             \"added\": [],
             \"modified\": [\"cloudbuild.yaml\"],
@@ -103,3 +101,4 @@ options:
 
 # Timeout for the entire build
 timeout: '600s'
+
