@@ -1,13 +1,4 @@
 steps:
-  # Install required tools
-  - name: 'gcr.io/cloud-builders/apt-get'
-    id: 'install-tools'
-    args: ['update']
-  
-  - name: 'gcr.io/cloud-builders/apt-get'
-    args: ['install', '-y', 'jq']
-    wait_for: ['install-tools']
-
   # Debug step to show environment variables
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'debug-info'
