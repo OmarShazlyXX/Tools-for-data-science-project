@@ -38,100 +38,44 @@ steps:
         echo "\nAgents Directory:"
         ls -la agents/ || echo "Agents directory not found"
 
-  # Step to publish a message to Pub/Sub
+  # Step to create a simple event and publish to Pub/Sub
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'publish-to-pubsub'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        # Get actual git changes
-        echo "Fetching actual repository changes..."
+        # Create a simple event JSON
+        echo "Creating simple event JSON..."
         
-        # Clone the repository to get access to git history
-        git clone https://source.developers.google.com/p/$PROJECT_ID/r/$REPO_NAME /tmp/repo
-        cd /tmp/repo
+        # Get basic git info
+        COMMIT_MESSAGE=$(git log -1 --pretty=%B || echo "Cloud Build Trigger")
+        AUTHOR_NAME=$(git log -1 --pretty=%an || echo "Cloud Build")
+        AUTHOR_EMAIL=$(git log -1 --pretty=%ae || echo "cloud-build@example.com")
         
-        # Configure git to show more information
-        git config --global --add safe.directory /tmp/repo
-        
-        # Get the commit message
-        COMMIT_MESSAGE=$(git log -1 --pretty=%B)
-        
-        # Get the author information
-        AUTHOR_NAME=$(git log -1 --pretty=%an)
-        AUTHOR_EMAIL=$(git log -1 --pretty=%ae)
-        
-        # Get files changed in the commit
-        ADDED_FILES=$(git diff-tree --no-commit-id --name-only --diff-filter=A -r $COMMIT_SHA | jq -R -s -c 'split("\n") | map(select(length > 0))')
-        MODIFIED_FILES=$(git diff-tree --no-commit-id --name-only --diff-filter=M -r $COMMIT_SHA | jq -R -s -c 'split("\n") | map(select(length > 0))')
-        REMOVED_FILES=$(git diff-tree --no-commit-id --name-only --diff-filter=D -r $COMMIT_SHA | jq -R -s -c 'split("\n") | map(select(length > 0))')
-        
-        # Return to workspace
-        cd /workspace
-        
-        # Extract repository owner information dynamically
-        # First try to get it from the git remote URL
-        echo "Extracting repository owner information..."
-        
-        # Try multiple approaches to get the owner/org name
-        # 1. Try to get from git remote URL
-        REMOTE_URL=$(git remote -v | grep fetch | awk '{print $2}' | head -1)
-        echo "Remote URL: $REMOTE_URL"
-        
-        # 2. Try to extract from Cloud Source Repositories metadata
-        CSR_METADATA=$(gcloud source repos describe $REPO_NAME --project=$PROJECT_ID --format=json 2>/dev/null || echo '{}')
-        
-        # 3. Try to get from commit author's organization
-        GIT_USER_EMAIL=$(git log -1 --pretty=%ae)
-        EMAIL_DOMAIN=$(echo $GIT_USER_EMAIL | cut -d '@' -f 2)
-        ORG_FROM_EMAIL=$(echo $EMAIL_DOMAIN | cut -d '.' -f 1)
-        
-        # Determine the best owner name to use
-        if [[ $REMOTE_URL == *"github.com"* ]]; then
-          # Extract org name from GitHub URL
-          REPO_OWNER=$(echo $REMOTE_URL | sed -E 's|.*github.com[:/]([^/]+)/.*|\1|')
-          echo "Owner extracted from GitHub URL: $REPO_OWNER"
-        elif [[ -n "$CSR_METADATA" && "$CSR_METADATA" != "{}" ]]; then
-          # Extract from Cloud Source Repositories metadata if available
-          REPO_OWNER=$(echo $CSR_METADATA | jq -r '.name' | cut -d '/' -f 1)
-          echo "Owner extracted from CSR metadata: $REPO_OWNER"
-        elif [[ -n "$GIT_USER_EMAIL" && "$GIT_USER_EMAIL" != *"@example.com"* ]]; then
-          # Use organization from email domain as fallback
-          REPO_OWNER=$ORG_FROM_EMAIL
-          echo "Owner extracted from email domain: $REPO_OWNER"
-        else
-          # Last resort: use the username part of the commit author's email
-          REPO_OWNER=$(git log -1 --pretty=%an | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-          echo "Owner extracted from author name: $REPO_OWNER"
-        fi
-        
-        # Create JSON payload with actual git information
-        echo "Creating JSON payload with actual git changes..."
-        cat > /workspace/event.json << 'EOL'
-{
-  "repository": {
-    "name": "'"$REPO_NAME"'",
-    "full_name": "'"$REPO_OWNER/$REPO_NAME"'"
-  },
-  "ref": "refs/heads/'"$BRANCH_NAME"'",
-  "pusher": {
-    "name": "'"$AUTHOR_NAME"'",
-    "email": "'"$AUTHOR_EMAIL"'"
-  },
-  "commits": [{
-    "id": "'"$COMMIT_SHA"'",
-    "message": "'"$COMMIT_MESSAGE"'",
-    "author": {
-      "name": "'"$AUTHOR_NAME"'",
-      "email": "'"$AUTHOR_EMAIL"'"
-    },
-    "added": '"$ADDED_FILES"',
-    "modified": '"$MODIFIED_FILES"',
-    "removed": '"$REMOVED_FILES"'
-  }]
-}
-EOL
+        # Create a simple JSON payload
+        echo "{
+          \"repository\": {
+            \"name\": \"$REPO_NAME\",
+            \"full_name\": \"$PROJECT_ID/$REPO_NAME\"
+          },
+          \"ref\": \"refs/heads/$BRANCH_NAME\",
+          \"pusher\": {
+            \"name\": \"$AUTHOR_NAME\",
+            \"email\": \"$AUTHOR_EMAIL\"
+          },
+          \"commits\": [{
+            \"id\": \"$COMMIT_SHA\",
+            \"message\": \"$COMMIT_MESSAGE\",
+            \"author\": {
+              \"name\": \"$AUTHOR_NAME\",
+              \"email\": \"$AUTHOR_EMAIL\"
+            },
+            \"added\": [],
+            \"modified\": [\"cloudbuild.yaml\"],
+            \"removed\": []
+          }]
+        }" > /workspace/event.json
         
         # Print the event data for debugging
         echo "\nEvent JSON Payload:"
@@ -141,8 +85,7 @@ EOL
         echo "\nChecking if Pub/Sub topic exists..."
         gcloud pubsub topics describe github-events --project=$PROJECT_ID || echo "Topic does not exist"
         
-        # Publish to Pub/Sub with verbose output
-        # Note: Using --message instead of --message-file as the latter causes errors
+        # Publish to Pub/Sub
         echo "\nPublishing to Pub/Sub topic..."
         gcloud pubsub topics publish github-events --message="$(cat /workspace/event.json)" --project=$PROJECT_ID
         
@@ -160,5 +103,3 @@ options:
 
 # Timeout for the entire build
 timeout: '600s'
-
-# Make sure this file is triggered on any change to the repository
