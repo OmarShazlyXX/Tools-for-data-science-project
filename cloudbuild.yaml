@@ -108,30 +108,30 @@ steps:
         
         # Create JSON payload with actual git information
         echo "Creating JSON payload with actual git changes..."
-        cat > /workspace/event.json << EOF
+        cat > /workspace/event.json << 'EOL'
 {
   "repository": {
-    "name": "$REPO_NAME",
-    "full_name": "$REPO_OWNER/$REPO_NAME"
+    "name": "'"$REPO_NAME"'",
+    "full_name": "'"$REPO_OWNER/$REPO_NAME"'"
   },
-  "ref": "refs/heads/$BRANCH_NAME",
+  "ref": "refs/heads/'"$BRANCH_NAME"'",
   "pusher": {
-    "name": "$AUTHOR_NAME",
-    "email": "$AUTHOR_EMAIL"
+    "name": "'"$AUTHOR_NAME"'",
+    "email": "'"$AUTHOR_EMAIL"'"
   },
   "commits": [{
-    "id": "$COMMIT_SHA",
-    "message": "$COMMIT_MESSAGE",
+    "id": "'"$COMMIT_SHA"'",
+    "message": "'"$COMMIT_MESSAGE"'",
     "author": {
-      "name": "$AUTHOR_NAME",
-      "email": "$AUTHOR_EMAIL"
+      "name": "'"$AUTHOR_NAME"'",
+      "email": "'"$AUTHOR_EMAIL"'"
     },
-    "added": $ADDED_FILES,
-    "modified": $MODIFIED_FILES,
-    "removed": $REMOVED_FILES
+    "added": '"$ADDED_FILES"',
+    "modified": '"$MODIFIED_FILES"',
+    "removed": '"$REMOVED_FILES"'
   }]
 }
-EOF
+EOL
         
         # Print the event data for debugging
         echo "\nEvent JSON Payload:"
@@ -162,4 +162,3 @@ options:
 timeout: '600s'
 
 # Make sure this file is triggered on any change to the repository
-
